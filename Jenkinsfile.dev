@@ -1,11 +1,5 @@
-// Jenkinsfile.dev - Build complet sur push vers dev (avec "matrix" parallèle simulée)
 pipeline {
     agent any
-
-    triggers {
-        // Exemple si tحب تستخدم pollSCM:
-        // pollSCM('H/5 * * * *')
-    }
 
     stages {
 
@@ -17,7 +11,6 @@ pipeline {
 
         stage('Setup') {
             steps {
-                // Installation des dépendances avec Node 20.9.0 sur l’agent Windows
                 bat 'npm install'
             }
         }
@@ -27,7 +20,6 @@ pipeline {
 
                 stage('Build-node18 (simulated)') {
                     steps {
-                        // On simule un environnement Node 18 (même machine, même Node)
                         bat 'echo Building with Node 18 (simulated)'
                         bat 'npm run build'
                     }
@@ -35,7 +27,6 @@ pipeline {
 
                 stage('Build-node20 (simulated)') {
                     steps {
-                        // On simule un environnement Node 20 (Node déjà installé sur l’agent)
                         bat 'echo Building with Node 20 (simulated)'
                         bat 'npm run build'
                     }
@@ -47,46 +38,34 @@ pipeline {
         stage('Run (Docker)') {
             steps {
                 script {
-                    // Build de l’image Docker pour l’environnement dev
                     bat "docker build -t react-ci-dev:%BUILD_ID% ."
-
-                    // Lancer le container (en détaché) sur le port 8081
                     bat "docker run -d -p 8081:80 --name react-ci-dev-%BUILD_ID% react-ci-dev:%BUILD_ID%"
 
-                    // Petit temps d’attente pour laisser démarrer Nginx
                     bat "ping 127.0.0.1 -n 5 >NUL"
 
-                    // Smoke test (vérifie que dist existe) – déjà généré par les builds
                     bat "npm run test:smoke"
 
-                    // Stop & remove du container
-                    bat "docker stop react-ci-dev-%BUILD_ID% || echo container already stopped"
-                    bat "docker rm react-ci-dev-%BUILD_ID% || echo container already removed"
+                    bat "docker stop react-ci-dev-%BUILD_ID% || echo already stopped"
+                    bat "docker rm react-ci-dev-%BUILD_ID% || echo already removed"
                 }
             }
         }
 
         stage('Archive Artifacts') {
             steps {
-                // On archive le dossier dist généré par npm run build
                 archiveArtifacts artifacts: 'dist/**', fingerprint: true
             }
         }
 
         stage('Cleanup') {
             steps {
-                // Nettoyage des images Docker non utilisées (optionnel)
                 bat "docker image prune -af || echo cleanup failed"
             }
         }
     }
 
     post {
-        success {
-            echo "Dev pipeline success"
-        }
-        failure {
-            echo "Dev pipeline failed"
-        }
+        success { echo "Dev pipeline success" }
+        failure { echo "Dev pipeline failed" }
     }
 }
