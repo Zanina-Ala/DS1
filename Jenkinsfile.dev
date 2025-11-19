@@ -1,65 +1,92 @@
-// Jenkinsfile.dev - Full build on push to dev (includes parallel matrix)
+// Jenkinsfile.dev - Build complet sur push vers dev (avec "matrix" parallèle simulée)
 pipeline {
-  agent any
-  triggers {
-    // configure GitHub push trigger to this pipeline or use pollSCM
-  }
-  stages {
-    stage('Checkout') {
-      steps { checkout scm }
+    agent any
+
+    triggers {
+        // Exemple si tحب تستخدم pollSCM:
+        // pollSCM('H/5 * * * *')
     }
-    stage('Setup') {
-      steps {
-        sh 'npm ci'
-      }
-    }
-    stage('Parallel Build Matrix') {
-      parallel {
-        node18 {
-          stages {
-            stage('Build-node18') {
-              steps {
-                sh 'echo "Building with Node 18 (simulated)"'
-                sh 'npm run build'
-              }
+
+    stages {
+
+        stage('Checkout') {
+            steps {
+                checkout scm
             }
-          }
         }
-        node20 {
-          stages {
-            stage('Build-node20') {
-              steps {
-                sh 'echo "Building with Node 20 (simulated)"'
-                sh 'npm run build'
-              }
+
+        stage('Setup') {
+            steps {
+                // Installation des dépendances avec Node 20.9.0 sur l’agent Windows
+                bat 'npm install'
             }
-          }
         }
-      }
-    }
-    stage('Run (Docker)') {
-      steps {
-        script {
-          def img = docker.build("react-ci-dev:${env.BUILD_ID}")
-          docker.withRun(img, "-p 8081:80") {
-            sh 'sleep 2'
-            sh 'bash smoke/smoke_test.sh http://localhost 8081'
-          }
+
+        stage('Parallel Build Matrix') {
+            parallel {
+
+                stage('Build-node18 (simulated)') {
+                    steps {
+                        // On simule un environnement Node 18 (même machine, même Node)
+                        bat 'echo Building with Node 18 (simulated)'
+                        bat 'npm run build'
+                    }
+                }
+
+                stage('Build-node20 (simulated)') {
+                    steps {
+                        // On simule un environnement Node 20 (Node déjà installé sur l’agent)
+                        bat 'echo Building with Node 20 (simulated)'
+                        bat 'npm run build'
+                    }
+                }
+
+            }
         }
-      }
+
+        stage('Run (Docker)') {
+            steps {
+                script {
+                    // Build de l’image Docker pour l’environnement dev
+                    bat "docker build -t react-ci-dev:%BUILD_ID% ."
+
+                    // Lancer le container (en détaché) sur le port 8081
+                    bat "docker run -d -p 8081:80 --name react-ci-dev-%BUILD_ID% react-ci-dev:%BUILD_ID%"
+
+                    // Petit temps d’attente pour laisser démarrer Nginx
+                    bat "ping 127.0.0.1 -n 5 >NUL"
+
+                    // Smoke test (vérifie que dist existe) – déjà généré par les builds
+                    bat "npm run test:smoke"
+
+                    // Stop & remove du container
+                    bat "docker stop react-ci-dev-%BUILD_ID% || echo container already stopped"
+                    bat "docker rm react-ci-dev-%BUILD_ID% || echo container already removed"
+                }
+            }
+        }
+
+        stage('Archive Artifacts') {
+            steps {
+                // On archive le dossier dist généré par npm run build
+                archiveArtifacts artifacts: 'dist/**', fingerprint: true
+            }
+        }
+
+        stage('Cleanup') {
+            steps {
+                // Nettoyage des images Docker non utilisées (optionnel)
+                bat "docker image prune -af || echo cleanup failed"
+            }
+        }
     }
-    stage('Archive Artifacts') {
-      steps {
-        sh 'mkdir -p artifacts; cp -r dist artifacts || true; tar -czf artifacts_dev_${BUILD_ID}.tar.gz artifacts'
-        archiveArtifacts artifacts: 'artifacts_dev_*.tar.gz'
-      }
+
+    post {
+        success {
+            echo "Dev pipeline success"
+        }
+        failure {
+            echo "Dev pipeline failed"
+        }
     }
-    stage('Cleanup') {
-      steps { sh 'docker image prune -af || true' }
-    }
-  }
-  post {
-    success { echo "Dev pipeline success" }
-    failure { echo "Dev pipeline failed" }
-  }
 }
