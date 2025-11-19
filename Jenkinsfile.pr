@@ -1,0 +1,60 @@
+// Jenkinsfile.pr - Build & Smoke on Pull Request to dev
+pipeline {
+  agent any
+  triggers { // configure GitHub PR trigger in Jenkins (GitHub Branch Source)
+    // no-op here; configure in Jenkins job
+  }
+  stages {
+    stage('Checkout') {
+      steps {
+        checkout scm
+      }
+    }
+    stage('Setup') {
+      steps {
+        sh 'node -v || true'
+        sh 'npm ci'
+      }
+    }
+    stage('Build') {
+      steps {
+        sh 'npm run build'
+      }
+    }
+    stage('Run (Docker)') {
+      steps {
+        script {
+          def img = docker.build("react-ci-pr:${env.BUILD_NUMBER}")
+          docker.withRun(img, "-p 8080:80") {
+            sh 'sleep 2'
+            sh 'bash smoke/smoke_test.sh http://localhost 8080'
+          }
+        }
+      }
+    }
+    stage('Archive Artifacts') {
+      steps {
+        sh 'mkdir -p artifacts; cp -r dist artifacts || true; tar -czf artifacts_pr_${BUILD_NUMBER}.tar.gz artifacts'
+        archiveArtifacts artifacts: 'artifacts_pr_*.tar.gz', onlyIfSuccessful: true
+      }
+    }
+    stage('Cleanup') {
+      steps {
+        sh 'docker image prune -af || true'
+      }
+    }
+  }
+  post {
+    success {
+      echo "PR pipeline succeeded"
+    }
+    failure {
+      echo "PR pipeline failed"
+    }
+    always {
+      script {
+        // collect logs if needed
+      }
+    }
+  }
+}
