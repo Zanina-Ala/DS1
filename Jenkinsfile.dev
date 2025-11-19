@@ -18,7 +18,7 @@ pipeline {
             }
         }
 
-        // Sur l'agent Windows
+        // Install local deps (optionnel mais propre)
         stage('Install dependencies') {
             steps {
                 bat 'npm install'
@@ -27,43 +27,28 @@ pipeline {
 
         stage('Parallel Build and Smoke Tests') {
             parallel {
+
                 stage('Node 18 Build') {
-                    agent {
-                        docker { image 'node:18' }
-                    }
-                    stages {
-                        stage('Install (node18)') {
-                            steps { sh 'npm install' }
-                        }
-                        stage('Build (node18)') {
-                            steps { sh 'npm run build' }
-                        }
-                        stage('Smoke (node18)') {
-                            steps { sh 'npm run test:smoke' }
-                        }
+                    steps {
+                        // build + smoke test inside node:18 container
+                        bat 'docker run --rm -v "%CD%":/app -w /app node:18 npm install'
+                        bat 'docker run --rm -v "%CD%":/app -w /app node:18 npm run build'
+                        bat 'docker run --rm -v "%CD%":/app -w /app node:18 npm run test:smoke'
                     }
                 }
 
                 stage('Node 20 Build') {
-                    agent {
-                        docker { image 'node:20' }
-                    }
-                    stages {
-                        stage('Install (node20)') {
-                            steps { sh 'npm install' }
-                        }
-                        stage('Build (node20)') {
-                            steps { sh 'npm run build' }
-                        }
-                        stage('Smoke (node20)') {
-                            steps { sh 'npm run test:smoke' }
-                        }
+                    steps {
+                        // build + smoke test inside node:20 container
+                        bat 'docker run --rm -v "%CD%":/app -w /app node:20 npm install'
+                        bat 'docker run --rm -v "%CD%":/app -w /app node:20 npm run build'
+                        bat 'docker run --rm -v "%CD%":/app -w /app node:20 npm run test:smoke'
                     }
                 }
+
             }
         }
 
-        // Toujours sur l’agent Windows
         stage('Docker Build (dev)') {
             steps {
                 bat "docker build -t ${APP_NAME}:latest ."
