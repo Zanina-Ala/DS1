@@ -77,10 +77,10 @@ pipeline {
 
     post {
         success {
-            echo "✅ DEV pipeline OK"
+            echo "DEV pipeline OK"
         }
         failure {
-            echo "❌ DEV pipeline FAILED"
+            echo "DEV pipeline FAILED"
         }
     }
 }

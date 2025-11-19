@@ -58,10 +58,10 @@ pipeline {
 
     post {
         success {
-            echo "✅ PR pipeline succeeded"
+            echo "PR pipeline succeeded"
         }
         failure {
-            echo "❌ PR pipeline failed"
+            echo "sPR pipeline failed"
         }
     }
 }

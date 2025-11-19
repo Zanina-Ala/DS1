@@ -8,6 +8,7 @@
     "preview": "vite preview --port 5173",
     "start": "serve -s dist -l 3000",
     "test": "echo \"No tests yet\" && exit 0",
+    "test:smoke": "node smoke/smoke-test.js",
     "smoke": "bash smoke/smoke_test.sh"
   },
   "dependencies": {

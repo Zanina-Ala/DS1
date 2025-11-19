@@ -65,10 +65,10 @@ pipeline {
 
     post {
         success {
-            echo "✅ Release pipeline for ${VERSION} OK"
+            echo "Release pipeline for ${VERSION} OK"
         }
         failure {
-            echo "❌ Release pipeline for ${VERSION} FAILED"
+            echo "Release pipeline for ${VERSION} FAILED"
         }
     }
 }
