@@ -1,6 +1,11 @@
 pipeline {
     agent any
 
+    environment {
+        APP_NAME = 'react-ci-dev'
+        APP_PORT = '8081'
+    }
+
     stages {
 
         stage('Checkout') {
@@ -38,15 +43,20 @@ pipeline {
         stage('Run (Docker)') {
             steps {
                 script {
-                    bat "docker build -t react-ci-dev:%BUILD_ID% ."
-                    bat "docker run -d -p 8081:80 --name react-ci-dev-%BUILD_ID% react-ci-dev:%BUILD_ID%"
+
+                    bat '''
+                    echo Cleaning old containers for react-ci-dev...
+                    for /f "tokens=1" %%i in ('docker ps -aq --filter "name=react-ci-dev"') do docker rm -f %%i
+                    '''
+
+                    //  Build image
+                    bat "docker build -t %APP_NAME%:%BUILD_ID% ."
+
+                    bat "docker run -d -p %APP_PORT%:80 --name %APP_NAME%-%BUILD_ID% %APP_NAME%:%BUILD_ID%"
 
                     bat "ping 127.0.0.1 -n 5 >NUL"
 
                     bat "npm run test:smoke"
-
-                    bat "docker stop react-ci-dev-%BUILD_ID% || echo already stopped"
-                    bat "docker rm react-ci-dev-%BUILD_ID% || echo already removed"
                 }
             }
         }
@@ -57,6 +67,7 @@ pipeline {
             }
         }
 
+        // نجّم تخلّيها أو تنحيها بما إننا عملنا cleanup في post { always }
         stage('Cleanup') {
             steps {
                 bat "docker image prune -af || echo cleanup failed"
@@ -65,6 +76,17 @@ pipeline {
     }
 
     post {
+
+        // دايمًا ننظّف containers (حتى كان build fail)
+        always {
+            script {
+                bat '''
+                echo Post-build cleanup: removing containers react-ci-dev* ...
+                for /f "tokens=1" %%i in ('docker ps -aq --filter "name=react-ci-dev"') do docker rm -f %%i
+                '''
+            }
+        }
+
         success { echo "Dev pipeline success" }
         failure { echo "Dev pipeline failed" }
     }
