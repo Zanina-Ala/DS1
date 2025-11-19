@@ -1,65 +1,86 @@
-// Jenkinsfile.dev - Full build on push to dev (includes parallel matrix)
 pipeline {
-  agent any
-  triggers {
-    // configure GitHub push trigger to this pipeline or use pollSCM
-  }
-  stages {
-    stage('Checkout') {
-      steps { checkout scm }
+    agent any
+
+    options {
+        timestamps()
+        disableConcurrentBuilds()
+        skipStagesAfterUnstable()
     }
-    stage('Setup') {
-      steps {
-        sh 'npm ci'
-      }
+
+    environment {
+        APP_NAME = "ds1-react-app-dev"
     }
-    stage('Parallel Build Matrix') {
-      parallel {
-        node18 {
-          stages {
-            stage('Build-node18') {
-              steps {
-                sh 'echo "Building with Node 18 (simulated)"'
-                sh 'npm run build'
-              }
+
+    stages {
+        stage('Checkout') {
+            steps {
+                checkout scm
             }
-          }
         }
-        node20 {
-          stages {
-            stage('Build-node20') {
-              steps {
-                sh 'echo "Building with Node 20 (simulated)"'
-                sh 'npm run build'
-              }
+
+        stage('Install dependencies') {
+            steps {
+                sh 'npm install'
             }
-          }
         }
-      }
-    }
-    stage('Run (Docker)') {
-      steps {
-        script {
-          def img = docker.build("react-ci-dev:${env.BUILD_ID}")
-          docker.withRun(img, "-p 8081:80") {
-            sh 'sleep 2'
-            sh 'bash smoke/smoke_test.sh http://localhost 8081'
-          }
+
+        stage('Parallel Build & Smoke Tests') {
+            parallel {
+                stage('Node 18 Build') {
+                    agent {
+                        docker { image 'node:18' }
+                    }
+                    stages {
+                        stage('Install (node18)') {
+                            steps { sh 'npm install' }
+                        }
+                        stage('Build (node18)') {
+                            steps { sh 'npm run build' }
+                        }
+                        stage('Smoke (node18)') {
+                            steps { sh 'npm run test:smoke' }
+                        }
+                    }
+                }
+
+                stage('Node 20 Build') {
+                    agent {
+                        docker { image 'node:20' }
+                    }
+                    stages {
+                        stage('Install (node20)') {
+                            steps { sh 'npm install' }
+                        }
+                        stage('Build (node20)') {
+                            steps { sh 'npm run build' }
+                        }
+                        stage('Smoke (node20)') {
+                            steps { sh 'npm run test:smoke' }
+                        }
+                    }
+                }
+            }
         }
-      }
+
+        stage('Docker Build (dev)') {
+            steps {
+                sh "docker build -t ${APP_NAME}:latest ."
+            }
+        }
+
+        stage('Archive dist/') {
+            steps {
+                archiveArtifacts artifacts: 'dist/**', fingerprint: true
+            }
+        }
     }
-    stage('Archive Artifacts') {
-      steps {
-        sh 'mkdir -p artifacts; cp -r dist artifacts || true; tar -czf artifacts_dev_${BUILD_ID}.tar.gz artifacts'
-        archiveArtifacts artifacts: 'artifacts_dev_*.tar.gz'
-      }
+
+    post {
+        success {
+            echo "✅ DEV pipeline OK"
+        }
+        failure {
+            echo "❌ DEV pipeline FAILED"
+        }
     }
-    stage('Cleanup') {
-      steps { sh 'docker image prune -af || true' }
-    }
-  }
-  post {
-    success { echo "Dev pipeline success" }
-    failure { echo "Dev pipeline failed" }
-  }
 }

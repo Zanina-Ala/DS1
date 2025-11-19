@@ -1,60 +1,67 @@
-// Jenkinsfile.pr - Build & Smoke on Pull Request to dev
 pipeline {
-  agent any
-  triggers { // configure GitHub PR trigger in Jenkins (GitHub Branch Source)
-    // no-op here; configure in Jenkins job
-  }
-  stages {
-    stage('Checkout') {
-      steps {
-        checkout scm
-      }
+    agent any
+
+    options {
+        timestamps()
+        disableConcurrentBuilds()
+        skipStagesAfterUnstable()
     }
-    stage('Setup') {
-      steps {
-        sh 'node -v || true'
-        sh 'npm ci'
-      }
+
+    environment {
+        APP_NAME = "ds1-react-app"
     }
-    stage('Build') {
-      steps {
-        sh 'npm run build'
-      }
-    }
-    stage('Run (Docker)') {
-      steps {
-        script {
-          def img = docker.build("react-ci-pr:${env.BUILD_NUMBER}")
-          docker.withRun(img, "-p 8080:80") {
-            sh 'sleep 2'
-            sh 'bash smoke/smoke_test.sh http://localhost 8080'
-          }
+
+    stages {
+        stage('Checkout') {
+            steps {
+                checkout scm
+            }
         }
-      }
+
+        stage('Node & NPM Version') {
+            steps {
+                sh 'node -v || echo "Node pas installé sur l\'agent"'
+                sh 'npm -v || echo "NPM pas installé sur l\'agent"'
+            }
+        }
+
+        stage('Install dependencies') {
+            steps {
+                sh 'npm install'
+            }
+        }
+
+        stage('Build (Vite)') {
+            steps {
+                sh 'npm run build'
+            }
+        }
+
+        stage('Smoke Test') {
+            steps {
+                sh 'npm run test:smoke'
+            }
+        }
+
+        stage('Docker Build (PR)') {
+            steps {
+                sh "docker build -t ${APP_NAME}:pr ."
+            }
+        }
+
+        stage('Archive Artifacts') {
+            steps {
+                archiveArtifacts artifacts: 'dist/**', fingerprint: true
+            }
+        }
     }
-    stage('Archive Artifacts') {
-      steps {
-        sh 'mkdir -p artifacts; cp -r dist artifacts || true; tar -czf artifacts_pr_${BUILD_NUMBER}.tar.gz artifacts'
-        archiveArtifacts artifacts: 'artifacts_pr_*.tar.gz', onlyIfSuccessful: true
-      }
+
+    post {
+        success {
+            echo "✅ PR pipeline succeeded"
+        }
+        failure {
+            echo "❌ PR pipeline failed"
+        }
     }
-    stage('Cleanup') {
-      steps {
-        sh 'docker image prune -af || true'
-      }
-    }
-  }
-  post {
-    success {
-      echo "PR pipeline succeeded"
-    }
-    failure {
-      echo "PR pipeline failed"
-    }
-    always {
-      script {
-        // collect logs if needed
-      }
-    }
-  }
 }

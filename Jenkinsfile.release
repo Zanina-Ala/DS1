@@ -1,65 +1,74 @@
-// Jenkinsfile.release - Versioned build on tag vX.Y.Z
 pipeline {
-  agent any
-  parameters {
-    string(name: 'GIT_TAG', defaultValue: '', description: 'Tag name (vX.Y.Z)')
-  }
-  triggers {
-    // configure to trigger on Git tags (requires Git plugin / webhook)
-  }
-  stages {
-    stage('Checkout') {
-      steps { checkout scm }
+    agent any
+
+    options {
+        timestamps()
+        disableConcurrentBuilds()
+        skipStagesAfterUnstable()
     }
-    stage('Verify Tag') {
-      steps {
-        script {
-          if (!params.GIT_TAG || params.GIT_TAG.trim() == '') {
-            error('GIT_TAG parameter is required for release pipeline')
-          }
+
+    environment {
+        APP_NAME = "ds1-react-app"
+        // Exemple: refs/tags/v1.0.0 -> v1.0.0
+        VERSION = "${env.GIT_BRANCH}".replace('refs/tags/','')
+    }
+
+    stages {
+        stage('Checkout') {
+            steps {
+                checkout scm
+            }
         }
-      }
-    }
-    stage('Setup') {
-      steps { sh 'npm ci' }
-    }
-    stage('Build') {
-      steps { sh 'npm run build' }
-    }
-    stage('Docker Build & Save') {
-      steps {
-        script {
-          def imageName = "react-ci:${params.GIT_TAG}"
-          docker.build(imageName)
-          sh "docker save ${imageName} -o ${imageName}.tar || true"
+
+        stage('Validate Tag') {
+            steps {
+                script {
+                    echo "Branch: ${env.GIT_BRANCH}"
+                    echo "Version: ${env.VERSION}"
+                    if (!env.GIT_BRANCH.startsWith('refs/tags/v')) {
+                        error "Ce pipeline doit être lancé uniquement sur un tag vX.Y.Z"
+                    }
+                }
+            }
         }
-      }
-    }
-    stage('Run (Docker)') {
-      steps {
-        script {
-          def imageName = "react-ci:${params.GIT_TAG}"
-          docker.withRun(imageName, "-p 8082:80") {
-            sh 'sleep 2'
-            sh 'bash smoke/smoke_test.sh http://localhost 8082'
-          }
+
+        stage('Install dependencies') {
+            steps {
+                sh 'npm install'
+            }
         }
-      }
+
+        stage('Build (release)') {
+            steps {
+                sh 'npm run build'
+            }
+        }
+
+        stage('Smoke Test (release)') {
+            steps {
+                sh 'npm run test:smoke'
+            }
+        }
+
+        stage('Docker Build & Tag') {
+            steps {
+                sh "docker build -t ${APP_NAME}:${VERSION} ."
+            }
+        }
+
+        stage('Archive dist/ as Release Artifact') {
+            steps {
+                archiveArtifacts artifacts: 'dist/**', fingerprint: true
+            }
+        }
     }
-    stage('Archive Artifacts') {
-      steps {
-        sh 'mkdir -p artifacts'
-        sh "cp react-ci:${params.GIT_TAG}.tar artifacts/ || true || true"
-        sh 'tar -czf artifacts_release_${params.GIT_TAG}.tar.gz artifacts || true'
-        archiveArtifacts artifacts: 'artifacts_release_*.tar.gz'
-      }
+
+    post {
+        success {
+            echo "✅ Release pipeline for ${VERSION} OK"
+        }
+        failure {
+            echo "❌ Release pipeline for ${VERSION} FAILED"
+        }
     }
-    stage('Cleanup') {
-      steps { sh 'docker image prune -af || true' }
-    }
-  }
-  post {
-    success { echo "Release pipeline passed for ${params.GIT_TAG}" }
-    failure { echo "Release pipeline failed" }
-  }
 }
