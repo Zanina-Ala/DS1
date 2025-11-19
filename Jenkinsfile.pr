@@ -20,32 +20,32 @@ pipeline {
 
         stage('Node & NPM Version') {
             steps {
-                sh 'node -v || echo "Node pas installé sur l\'agent"'
-                sh 'npm -v || echo "NPM pas installé sur l\'agent"'
+                bat 'node -v'
+                bat 'npm -v'
             }
         }
 
         stage('Install dependencies') {
             steps {
-                sh 'npm install'
+                bat 'npm install'
             }
         }
 
         stage('Build (Vite)') {
             steps {
-                sh 'npm run build'
+                bat 'npm run build'
             }
         }
 
         stage('Smoke Test') {
             steps {
-                sh 'npm run test:smoke'
+                bat 'npm run test:smoke'
             }
         }
 
         stage('Docker Build (PR)') {
             steps {
-                sh "docker build -t ${APP_NAME}:pr ."
+                bat "docker build -t ${APP_NAME}:pr ."
             }
         }
 
@@ -61,7 +61,7 @@ pipeline {
             echo "PR pipeline succeeded"
         }
         failure {
-            echo "sPR pipeline failed"
+            echo "PR pipeline failed"
         }
     }
 }

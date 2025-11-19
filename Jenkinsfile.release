@@ -9,7 +9,6 @@ pipeline {
 
     environment {
         APP_NAME = "ds1-react-app"
-        // Exemple: refs/tags/v1.0.0 -> v1.0.0
         VERSION = "${env.GIT_BRANCH}".replace('refs/tags/','')
     }
 
@@ -26,7 +25,7 @@ pipeline {
                     echo "Branch: ${env.GIT_BRANCH}"
                     echo "Version: ${env.VERSION}"
                     if (!env.GIT_BRANCH.startsWith('refs/tags/v')) {
-                        error "Ce pipeline doit être lancé uniquement sur un tag vX.Y.Z"
+                        error "This pipeline must run on a tag vX.Y.Z"
                     }
                 }
             }
@@ -34,29 +33,29 @@ pipeline {
 
         stage('Install dependencies') {
             steps {
-                sh 'npm install'
+                bat 'npm install'
             }
         }
 
         stage('Build (release)') {
             steps {
-                sh 'npm run build'
+                bat 'npm run build'
             }
         }
 
         stage('Smoke Test (release)') {
             steps {
-                sh 'npm run test:smoke'
+                bat 'npm run test:smoke'
             }
         }
 
-        stage('Docker Build & Tag') {
+        stage('Docker Build and Tag') {
             steps {
-                sh "docker build -t ${APP_NAME}:${VERSION} ."
+                bat "docker build -t ${APP_NAME}:${VERSION} ."
             }
         }
 
-        stage('Archive dist/ as Release Artifact') {
+        stage('Archive dist as release artifact') {
             steps {
                 archiveArtifacts artifacts: 'dist/**', fingerprint: true
             }
@@ -65,10 +64,11 @@ pipeline {
 
     post {
         success {
-            echo "Release pipeline for ${VERSION} OK"
+            echo "Release pipeline for ${VERSION} succeeded"
         }
         failure {
-            echo "Release pipeline for ${VERSION} FAILED"
+            echo "Release pipeline for ${VERSION} failed"
         }
     }
 }
+  

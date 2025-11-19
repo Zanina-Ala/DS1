@@ -18,13 +18,14 @@ pipeline {
             }
         }
 
+        // Sur l'agent Windows
         stage('Install dependencies') {
             steps {
-                sh 'npm install'
+                bat 'npm install'
             }
         }
 
-        stage('Parallel Build & Smoke Tests') {
+        stage('Parallel Build and Smoke Tests') {
             parallel {
                 stage('Node 18 Build') {
                     agent {
@@ -62,13 +63,14 @@ pipeline {
             }
         }
 
+        // Toujours sur l’agent Windows
         stage('Docker Build (dev)') {
             steps {
-                sh "docker build -t ${APP_NAME}:latest ."
+                bat "docker build -t ${APP_NAME}:latest ."
             }
         }
 
-        stage('Archive dist/') {
+        stage('Archive dist') {
             steps {
                 archiveArtifacts artifacts: 'dist/**', fingerprint: true
             }
@@ -77,10 +79,10 @@ pipeline {
 
     post {
         success {
-            echo "DEV pipeline OK"
+            echo "DEV pipeline succeeded"
         }
         failure {
-            echo "DEV pipeline FAILED"
+            echo "DEV pipeline failed"
         }
     }
 }
