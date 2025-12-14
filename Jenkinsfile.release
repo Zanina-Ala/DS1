@@ -1,10 +1,5 @@
 pipeline {
-  agent {
-    docker {
-      image 'node:20'
-      args '-u node'
-    }
-  }
+  agent any
   parameters {
     string(name: 'GIT_TAG', defaultValue: '', description: 'Tag name (vX.Y.Z)')
   }
@@ -31,7 +26,7 @@ pipeline {
       steps {
         script {
           def imageName = "react-ci:${params.GIT_TAG}"
-          docker.build(imageName)
+          sh "docker build -t ${imageName} ."
           sh "docker save ${imageName} -o ${imageName}.tar || true"
         }
       }
@@ -40,10 +35,10 @@ pipeline {
       steps {
         script {
           def imageName = "react-ci:${params.GIT_TAG}"
-          docker.withRun(imageName, "-p 8082:80") {
-            sh 'sleep 2'
-            sh 'bash smoke/smoke_test.sh http://localhost 8082'
-          }
+          sh "docker run -d -p 8082:80 --name tmp_${params.GIT_TAG} ${imageName}"
+          sh "sleep 2"
+          sh "bash smoke/smoke_test.sh http://localhost:8082"
+          sh "docker rm -f tmp_${params.GIT_TAG}"
         }
       }
     }
