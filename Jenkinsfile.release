@@ -53,4 +53,11 @@ pipeline {
       }
     }
     stage('Cleanup') {
-      steps { bat "docker image pru
+      steps { bat "docker image prune -af || exit /b 0" }
+    }
+  }
+  post {
+    success { echo "Release pipeline passed for ${params.GIT_TAG}" }
+    failure { echo "Release pipeline failed" }
+  }
+}
