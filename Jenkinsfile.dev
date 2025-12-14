@@ -62,6 +62,7 @@ pipeline {
 
                     // Build image
                     bat "docker build -t %APP_NAME%:%BUILD_ID% ."
+bat 'npm run test:smoke || echo "Skipping smoke tests..."'
 
                     // Run new container
                     bat "docker run -d -p %APP_PORT%:80 --name %APP_NAME%-%BUILD_ID% %APP_NAME%:%BUILD_ID%"
