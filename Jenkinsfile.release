@@ -28,7 +28,7 @@ pipeline {
         script {
           def imageName = "react-ci:${params.GIT_TAG}"
           bat "docker build -t ${imageName} ."
-          bat "docker save ${imageName} -o ${imageName}.tar || exit /b 0"
+          bat "docker save react-ci:v1.0.0 -o react-ci_v1.0.0.tar || exit /b 0"
         }
       }
     }
@@ -38,7 +38,7 @@ pipeline {
           def imageName = "react-ci:${params.GIT_TAG}"
           // تشغيل Docker على Windows باستخدام detached mode
           bat "docker run -d -p 8082:80 --name temp_run ${imageName}"
-          bat "timeout /t 2"
+          bat "timeout /t 2 /nobreak >nul"
           bat "bash smoke/smoke_test.sh http://localhost 8082"
           bat "docker stop temp_run && docker rm temp_run"
         }
