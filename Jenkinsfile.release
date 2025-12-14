@@ -1,3 +1,4 @@
+// Jenkinsfile.release - Versioned build on tag vX.Y.Z (Windows)
 pipeline {
   agent any
   parameters {
@@ -10,24 +11,24 @@ pipeline {
     stage('Verify Tag') {
       steps {
         script {
-          if (!params.GIT_TAG?.trim()) {
-            error('GIT_TAG parameter is required')
+          if (!params.GIT_TAG || params.GIT_TAG.trim() == '') {
+            error('GIT_TAG parameter is required for release pipeline')
           }
         }
       }
     }
     stage('Setup') {
-      steps { sh 'npm ci' }
+      steps { bat 'npm ci' }
     }
     stage('Build') {
-      steps { sh 'npm run build' }
+      steps { bat 'npm run build' }
     }
     stage('Docker Build & Save') {
       steps {
         script {
           def imageName = "react-ci:${params.GIT_TAG}"
-          sh "docker build -t ${imageName} ."
-          sh "docker save ${imageName} -o ${imageName}.tar || true"
+          bat "docker build -t ${imageName} ."
+          bat "docker save ${imageName} -o ${imageName}.tar || exit /b 0"
         }
       }
     }
@@ -35,27 +36,21 @@ pipeline {
       steps {
         script {
           def imageName = "react-ci:${params.GIT_TAG}"
-          sh "docker run -d -p 8082:80 --name tmp_${params.GIT_TAG} ${imageName}"
-          sh "sleep 2"
-          sh "bash smoke/smoke_test.sh http://localhost:8082"
-          sh "docker rm -f tmp_${params.GIT_TAG}"
+          // تشغيل Docker على Windows باستخدام detached mode
+          bat "docker run -d -p 8082:80 --name temp_run ${imageName}"
+          bat "timeout /t 2"
+          bat "bash smoke/smoke_test.sh http://localhost 8082"
+          bat "docker stop temp_run && docker rm temp_run"
         }
       }
     }
     stage('Archive Artifacts') {
       steps {
-        sh 'mkdir -p artifacts'
-        sh "cp react-ci:${params.GIT_TAG}.tar artifacts/ || true"
-        sh 'tar -czf artifacts_release_${params.GIT_TAG}.tar.gz artifacts'
+        bat "mkdir artifacts"
+        bat "copy react-ci:${params.GIT_TAG}.tar artifacts\\ || exit /b 0"
+        bat "tar -czf artifacts_release_${params.GIT_TAG}.tar.gz artifacts || exit /b 0"
         archiveArtifacts artifacts: 'artifacts_release_*.tar.gz'
       }
     }
     stage('Cleanup') {
-      steps { sh 'docker image prune -af || true' }
-    }
-  }
-  post {
-    success { echo "Release pipeline passed for ${params.GIT_TAG}" }
-    failure { echo "Release pipeline failed" }
-  }
-}
+      steps { bat "docker image pru
