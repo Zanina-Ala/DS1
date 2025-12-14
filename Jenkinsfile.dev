@@ -43,11 +43,12 @@ pipeline {
         stage('Run (Docker)') {
             steps {
                 script {
-
-                    // Pre-cleanup: remove old containers with similar name
+                    // Pre-cleanup: remove old containers with similar name safely
                     bat '''
                     echo Cleaning old containers for react-ci-dev...
-                    for /f "tokens=1" %%i in ('docker ps -aq --filter "name=react-ci-dev"') do docker rm -f %%i
+                    for /f "tokens=1" %%i in ('docker ps -aq --filter "name=react-ci-dev" 2^>nul') do (
+                        docker rm -f %%i || echo No container %%i to remove
+                    )
                     '''
 
                     // Build image
@@ -73,7 +74,9 @@ pipeline {
 
         stage('Cleanup') {
             steps {
-                bat "docker image prune -af || echo cleanup failed"
+                bat '''
+                docker image prune -af || echo "No images to prune"
+                '''
             }
         }
     }
@@ -81,9 +84,12 @@ pipeline {
     post {
         always {
             script {
+                // Post-build cleanup safe
                 bat '''
                 echo Post-build cleanup: removing containers react-ci-dev* ...
-                for /f "tokens=1" %%i in ('docker ps -aq --filter "name=react-ci-dev"') do docker rm -f %%i
+                for /f "tokens=1" %%i in ('docker ps -aq --filter "name=react-ci-dev" 2^>nul') do (
+                    docker rm -f %%i || echo No container %%i to remove
+                )
                 '''
             }
         }
