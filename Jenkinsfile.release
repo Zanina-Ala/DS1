@@ -39,20 +39,21 @@ pipeline {
             }
         }
 
-        stage('Run Docker') {
-            steps {
-                script {
-                    // Remove existing container if it exists
-                    bat "docker rm -f ${env.CONTAINER_NAME} || exit /b 0"
+      stage('Run Docker') {
+    steps {
+        script {
+            // Remove existing container if exists
+            bat "docker rm -f ${env.CONTAINER_NAME} || exit /b 0"
 
-                    // Run new container
-                    bat "docker run -d -p 8082:80 --name ${env.CONTAINER_NAME} ${env.IMAGE_NAME}:${env.IMAGE_TAG}"
+            // Run new container
+            bat "docker run -d -p 8082:80 --name ${env.CONTAINER_NAME} ${env.IMAGE_NAME}:${env.IMAGE_TAG}"
 
-                    // Wait a bit for container to start
-                    bat "timeout /t 2 /nobreak >nul"
-                }
-            }
+            // Wait a bit for container to start (using ping)
+            bat "ping 127.0.0.1 -n 3 >nul"
         }
+    }
+}
+
 
         stage('Archive Artifacts') {
             steps {
