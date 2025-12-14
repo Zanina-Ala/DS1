@@ -1,45 +1,81 @@
 pipeline {
-    agent any
+    agent {
+        docker {
+            image 'node:20-bullseye'
+            args '-u node'
+        }
+    }
+
+    parameters {
+        string(name: 'BUILD_ENV', defaultValue: 'production', description: 'Environment to build')
+        booleanParam(name: 'RUN_TESTS', defaultValue: true, description: 'Run tests before build')
+        string(name: 'DOCKER_TAG', defaultValue: 'latest', description: 'Tag for Docker image')
+    }
 
     environment {
-        NODE_ENV = 'production'
+        IMAGE_NAME = 'zanina/ds1-react-app'
     }
 
     stages {
         stage('Checkout SCM') {
             steps {
-                checkout scm
+                git 'https://github.com/Zanina-Ala/DS1.git'
             }
         }
 
-        stage('Setup') {
+        stage('Install Dependencies') {
             steps {
-                // تثبيت الحزم بدون تعديل package-lock
-                bat 'npm ci'
+                sh 'npm ci'
+            }
+        }
+
+        stage('Run Tests') {
+            when {
+                expression { params.RUN_TESTS == true }
+            }
+            steps {
+                sh 'npm test'
             }
         }
 
         stage('Build') {
             steps {
-                // استعمل npx باش يلقى vite من node_modules
-                bat 'npx vite build'
+                sh "BUILD_ENV=${params.BUILD_ENV} npx vite build"
+            }
+        }
+
+        stage('Build Docker Image') {
+            steps {
+                sh """
+                docker build -t ${IMAGE_NAME}:${params.DOCKER_TAG} .
+                """
+            }
+        }
+
+        stage('Push Docker Image') {
+            steps {
+                withCredentials([usernamePassword(credentialsId: 'docker-hub-creds', usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
+                    sh """
+                    echo $DOCKER_PASS | docker login -u $DOCKER_USER --password-stdin
+                    docker push ${IMAGE_NAME}:${params.DOCKER_TAG}
+                    """
+                }
             }
         }
 
         stage('Archive Artifacts') {
             steps {
-                // أرشيف ملفات build الناتجة
-                archiveArtifacts artifacts: 'dist/**', fingerprint: true
+                archiveArtifacts artifacts: 'dist/**', allowEmptyArchive: true
             }
         }
     }
 
     post {
-        success {
-            echo 'Build and artifact archiving succeeded!'
+        always {
+            echo 'Pipeline finished'
         }
         failure {
-            echo 'Pipeline failed.'
+            echo 'Pipeline failed'
         }
     }
 }
