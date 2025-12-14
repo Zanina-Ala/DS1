@@ -1,52 +1,43 @@
 pipeline {
   agent any
-  parameters {
-    string(name: 'GIT_TAG', defaultValue: '', description: 'Tag name (vX.Y.Z)')
+  environment {
+    // Récupérer le dernier tag Git automatiquement
+    GIT_TAG = sh(script: "git describe --tags --abbrev=0", returnStdout: true).trim()
   }
-
-  triggers {
-    // GitHub webhook trigger on push
-    githubPush()  
-  }
-
   stages {
     stage('Checkout') {
       steps { checkout scm }
     }
-
     stage('Verify Tag') {
       steps {
         script {
-          // نتأكد أن الجيت تاج موجود
-          if (!params.GIT_TAG || params.GIT_TAG.trim() == '') {
-            error('GIT_TAG parameter is required for release pipeline')
+          if (!env.GIT_TAG || env.GIT_TAG.trim() == '') {
+            error('No Git tag found! Make sure you have tags in your repository.')
+          } else {
+            echo "Using Git tag: ${env.GIT_TAG}"
           }
         }
       }
     }
-
     stage('Setup') {
       steps { sh 'npm ci' }
     }
-
     stage('Build') {
       steps { sh 'npm run build' }
     }
-
     stage('Docker Build & Save') {
       steps {
         script {
-          def imageName = "react-ci:${params.GIT_TAG}"
+          def imageName = "react-ci:${env.GIT_TAG}"
           docker.build(imageName)
           sh "docker save ${imageName} -o ${imageName}.tar || true"
         }
       }
     }
-
     stage('Run (Docker)') {
       steps {
         script {
-          def imageName = "react-ci:${params.GIT_TAG}"
+          def imageName = "react-ci:${env.GIT_TAG}"
           docker.withRun(imageName, "-p 8082:80") {
             sh 'sleep 2'
             sh 'bash smoke/smoke_test.sh http://localhost 8082'
@@ -54,23 +45,20 @@ pipeline {
         }
       }
     }
-
     stage('Archive Artifacts') {
       steps {
         sh 'mkdir -p artifacts'
-        sh "cp react-ci:${params.GIT_TAG}.tar artifacts/ || true"
-        sh 'tar -czf artifacts_release_${params.GIT_TAG}.tar.gz artifacts || true'
+        sh "cp react-ci:${env.GIT_TAG}.tar artifacts/ || true"
+        sh 'tar -czf artifacts_release_${env.GIT_TAG}.tar.gz artifacts || true'
         archiveArtifacts artifacts: 'artifacts_release_*.tar.gz'
       }
     }
-
     stage('Cleanup') {
       steps { sh 'docker image prune -af || true' }
     }
   }
-
   post {
-    success { echo "Release pipeline passed for ${params.GIT_TAG}" }
+    success { echo "Release pipeline passed for ${env.GIT_TAG}" }
     failure { echo "Release pipeline failed" }
   }
 }
