@@ -1,81 +1,76 @@
 pipeline {
-    agent {
-        docker {
-            image 'node:20-bullseye'
-            args '-u node'
-        }
+  agent any
+  parameters {
+    string(name: 'GIT_TAG', defaultValue: '', description: 'Tag name (vX.Y.Z)')
+  }
+
+  triggers {
+    // GitHub webhook trigger on push
+    githubPush()  
+  }
+
+  stages {
+    stage('Checkout') {
+      steps { checkout scm }
     }
 
-    parameters {
-        string(name: 'BUILD_ENV', defaultValue: 'production', description: 'Environment to build')
-        booleanParam(name: 'RUN_TESTS', defaultValue: true, description: 'Run tests before build')
-        string(name: 'DOCKER_TAG', defaultValue: 'latest', description: 'Tag for Docker image')
+    stage('Verify Tag') {
+      steps {
+        script {
+          // نتأكد أن الجيت تاج موجود
+          if (!params.GIT_TAG || params.GIT_TAG.trim() == '') {
+            error('GIT_TAG parameter is required for release pipeline')
+          }
+        }
+      }
     }
 
-    environment {
-        IMAGE_NAME = 'zanina/ds1-react-app'
+    stage('Setup') {
+      steps { sh 'npm ci' }
     }
 
-    stages {
-        stage('Checkout SCM') {
-            steps {
-                git 'https://github.com/Zanina-Ala/DS1.git'
-            }
-        }
-
-        stage('Install Dependencies') {
-            steps {
-                sh 'npm ci'
-            }
-        }
-
-        stage('Run Tests') {
-            when {
-                expression { params.RUN_TESTS == true }
-            }
-            steps {
-                sh 'npm test'
-            }
-        }
-
-        stage('Build') {
-            steps {
-                sh "BUILD_ENV=${params.BUILD_ENV} npx vite build"
-            }
-        }
-
-        stage('Build Docker Image') {
-            steps {
-                sh """
-                docker build -t ${IMAGE_NAME}:${params.DOCKER_TAG} .
-                """
-            }
-        }
-
-        stage('Push Docker Image') {
-            steps {
-                withCredentials([usernamePassword(credentialsId: 'docker-hub-creds', usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
-                    sh """
-                    echo $DOCKER_PASS | docker login -u $DOCKER_USER --password-stdin
-                    docker push ${IMAGE_NAME}:${params.DOCKER_TAG}
-                    """
-                }
-            }
-        }
-
-        stage('Archive Artifacts') {
-            steps {
-                archiveArtifacts artifacts: 'dist/**', allowEmptyArchive: true
-            }
-        }
+    stage('Build') {
+      steps { sh 'npm run build' }
     }
 
-    post {
-        always {
-            echo 'Pipeline finished'
+    stage('Docker Build & Save') {
+      steps {
+        script {
+          def imageName = "react-ci:${params.GIT_TAG}"
+          docker.build(imageName)
+          sh "docker save ${imageName} -o ${imageName}.tar || true"
         }
-        failure {
-            echo 'Pipeline failed'
-        }
+      }
     }
+
+    stage('Run (Docker)') {
+      steps {
+        script {
+          def imageName = "react-ci:${params.GIT_TAG}"
+          docker.withRun(imageName, "-p 8082:80") {
+            sh 'sleep 2'
+            sh 'bash smoke/smoke_test.sh http://localhost 8082'
+          }
+        }
+      }
+    }
+
+    stage('Archive Artifacts') {
+      steps {
+        sh 'mkdir -p artifacts'
+        sh "cp react-ci:${params.GIT_TAG}.tar artifacts/ || true"
+        sh 'tar -czf artifacts_release_${params.GIT_TAG}.tar.gz artifacts || true'
+        archiveArtifacts artifacts: 'artifacts_release_*.tar.gz'
+      }
+    }
+
+    stage('Cleanup') {
+      steps { sh 'docker image prune -af || true' }
+    }
+  }
+
+  post {
+    success { echo "Release pipeline passed for ${params.GIT_TAG}" }
+    failure { echo "Release pipeline failed" }
+  }
 }
