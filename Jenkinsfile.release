@@ -1,88 +1,75 @@
 pipeline {
-    agent any
+  agent any
+  parameters {
+    string(name: 'GIT_TAG', defaultValue: '', description: 'Tag name (vX.Y.Z)')
+  }
 
-    parameters {
-        string(name: 'GIT_TAG', defaultValue: '', description: 'Tag name (vX.Y.Z)')
+  triggers {
+    // GitHub webhook trigger on push
+    githubPush()  
+  }
+
+  stages {
+    stage('Checkout') {
+      steps { checkout scm }
     }
 
-    // مؤقتاً حذفنا triggers لتجنب أخطاء البناء
-    // triggers {
-    //     githubPush()
-    // }
-
-    stages {
-        stage('Checkout') {
-            steps {
-                checkout scm
-            }
+    stage('Verify Tag') {
+      steps {
+        script {
+          if (!params.GIT_TAG || params.GIT_TAG.trim() == '') {
+            error('GIT_TAG parameter is required for release pipeline')
+          }
         }
-
-        stage('Verify Tag') {
-            steps {
-                script {
-                    if (!params.GIT_TAG || params.GIT_TAG.trim() == '') {
-                        error('GIT_TAG parameter is required for release pipeline')
-                    }
-                }
-            }
-        }
-
-        stage('Setup') {
-            steps {
-                sh 'npm ci'
-            }
-        }
-
-        stage('Build') {
-            steps {
-                sh 'npm run build'
-            }
-        }
-
-        stage('Docker Build & Save') {
-            steps {
-                script {
-                    def imageName = "react-ci:${params.GIT_TAG}"
-                    docker.build(imageName)
-                    sh "docker save ${imageName} -o ${imageName}.tar || true"
-                }
-            }
-        }
-
-        stage('Run (Docker)') {
-            steps {
-                script {
-                    def imageName = "react-ci:${params.GIT_TAG}"
-                    docker.withRun(imageName, "-p 8082:80") {
-                        sh 'sleep 2'
-                        sh 'bash smoke/smoke_test.sh http://localhost 8082'
-                    }
-                }
-            }
-        }
-
-        stage('Archive Artifacts') {
-            steps {
-                sh 'mkdir -p artifacts'
-                sh "cp react-ci:${params.GIT_TAG}.tar artifacts/ || true"
-                sh 'tar -czf artifacts_release_${params.GIT_TAG}.tar.gz artifacts || true'
-                archiveArtifacts artifacts: 'artifacts_release_*.tar.gz'
-            }
-        }
-
-        stage('Cleanup') {
-            steps {
-                sh 'docker image prune -af || true'
-            }
-        }
+      }
     }
 
-    post {
-        success {
-            echo "Release pipeline passed for ${params.GIT_TAG}"
-        }
-        failure {
-            echo "Release pipeline failed"
-        }
+    stage('Setup') {
+      steps { bat 'npm ci' }
     }
+
+    stage('Build') {
+      steps { bat 'npm run build' }
+    }
+
+    stage('Docker Build & Save') {
+      steps {
+        script {
+          def imageName = "react-ci:${params.GIT_TAG}"
+          docker.build(imageName)
+          bat "docker save ${imageName} -o ${imageName}.tar || exit 0"
+        }
+      }
+    }
+
+    stage('Run (Docker)') {
+      steps {
+        script {
+          def imageName = "react-ci:${params.GIT_TAG}"
+          docker.withRun(imageName, "-p 8082:80") {
+            bat 'timeout /t 2'
+            bat 'bash smoke\\smoke_test.sh http://localhost 8082'
+          }
+        }
+      }
+    }
+
+    stage('Archive Artifacts') {
+      steps {
+        bat 'mkdir artifacts 2>nul || exit 0'
+        bat "copy react-ci:${params.GIT_TAG}.tar artifacts\\ || exit 0"
+        bat "tar -czf artifacts_release_${params.GIT_TAG}.tar.gz artifacts || exit 0"
+        archiveArtifacts artifacts: 'artifacts_release_*.tar.gz'
+      }
+    }
+
+    stage('Cleanup') {
+      steps { bat 'docker image prune -af || exit 0' }
+    }
+  }
+
+  post {
+    success { echo "Release pipeline passed for ${params.GIT_TAG}" }
+    failure { echo "Release pipeline failed" }
+  }
 }
