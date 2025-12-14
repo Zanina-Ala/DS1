@@ -1,13 +1,15 @@
 pipeline {
   agent any
+
+  // هذا الجزء هو اللي يخلي Build with Parameters يظهر
   parameters {
     string(name: 'GIT_TAG', defaultValue: '', description: 'Tag name (vX.Y.Z)')
   }
 
-  triggers {
-    // GitHub webhook trigger on push
-    githubPush()  
-  }
+  // تحذف triggers الفارغ أو تستعمل trigger صالح
+  // triggers {
+  //   githubPush()  // استعمل هذا فقط إذا عندك GitHub webhook
+  // }
 
   stages {
     stage('Checkout') {
@@ -17,7 +19,6 @@ pipeline {
     stage('Verify Tag') {
       steps {
         script {
-          // نتأكد أن الجيت تاج موجود
           if (!params.GIT_TAG || params.GIT_TAG.trim() == '') {
             error('GIT_TAG parameter is required for release pipeline')
           }
@@ -71,6 +72,4 @@ pipeline {
 
   post {
     success { echo "Release pipeline passed for ${params.GIT_TAG}" }
-    failure { echo "Release pipeline failed" }
-  }
-}
+    failure
