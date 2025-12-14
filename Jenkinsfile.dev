@@ -16,7 +16,13 @@ pipeline {
 
         stage('Setup') {
             steps {
-                bat 'npm install'
+                bat '''
+                echo Using Node 20.19.0 via nvm...
+                nvm use 20.19.0
+                node -v
+                npm -v
+                npm install
+                '''
             }
         }
 
@@ -25,15 +31,19 @@ pipeline {
 
                 stage('Build-node18 (simulated)') {
                     steps {
-                        bat 'echo Building with Node 18 (simulated)'
-                        bat 'npm run build'
+                        bat '''
+                        echo Building with Node 18 (simulated)
+                        npm run build
+                        '''
                     }
                 }
 
                 stage('Build-node20 (simulated)') {
                     steps {
-                        bat 'echo Building with Node 20 (simulated)'
-                        bat 'npm run build'
+                        bat '''
+                        echo Building with Node 20 (simulated)
+                        npm run build
+                        '''
                     }
                 }
 
@@ -43,10 +53,11 @@ pipeline {
         stage('Run (Docker)') {
             steps {
                 script {
-                    // Pre-cleanup: remove old containers with similar name safely
+
+                    // Pre-cleanup: remove old containers
                     bat '''
                     echo Cleaning old containers for react-ci-dev...
-                    for /f "tokens=1" %%i in ('docker ps -aq --filter "name=react-ci-dev" 2^>nul') do (
+                    for /f "tokens=1" %%i in ('docker ps -aq --filter "name=react-ci-dev" 2>nul') do (
                         docker rm -f %%i || echo No container %%i to remove
                     )
                     '''
@@ -54,10 +65,10 @@ pipeline {
                     // Build image
                     bat "docker build -t %APP_NAME%:%BUILD_ID% ."
 
-                    // Run new container
+                    // Run container
                     bat "docker run -d -p %APP_PORT%:80 --name %APP_NAME%-%BUILD_ID% %APP_NAME%:%BUILD_ID%"
 
-                    // Wait a bit for container to start
+                    // Wait a bit
                     bat "ping 127.0.0.1 -n 5 >NUL"
 
                     // Smoke tests
@@ -74,9 +85,7 @@ pipeline {
 
         stage('Cleanup') {
             steps {
-                bat '''
-                docker image prune -af || echo "No images to prune"
-                '''
+                bat "docker image prune -af || echo cleanup failed"
             }
         }
     }
@@ -84,10 +93,9 @@ pipeline {
     post {
         always {
             script {
-                // Post-build cleanup safe
                 bat '''
                 echo Post-build cleanup: removing containers react-ci-dev* ...
-                for /f "tokens=1" %%i in ('docker ps -aq --filter "name=react-ci-dev" 2^>nul') do (
+                for /f "tokens=1" %%i in ('docker ps -aq --filter "name=react-ci-dev" 2>nul') do (
                     docker rm -f %%i || echo No container %%i to remove
                 )
                 '''
