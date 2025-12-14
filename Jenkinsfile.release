@@ -14,18 +14,21 @@ pipeline {
 
         stage('Setup') {
             steps {
+                // تثبيت الحزم بدون تعديل package-lock
                 bat 'npm ci'
             }
         }
 
         stage('Build') {
             steps {
-                bat 'npm run build'
+                // استعمل npx باش يلقى vite من node_modules
+                bat 'npx vite build'
             }
         }
 
         stage('Archive Artifacts') {
             steps {
+                // أرشيف ملفات build الناتجة
                 archiveArtifacts artifacts: 'dist/**', fingerprint: true
             }
         }
@@ -33,10 +36,10 @@ pipeline {
 
     post {
         success {
-            echo 'Pipeline succeeded!'
+            echo 'Build and artifact archiving succeeded!'
         }
         failure {
-            echo 'Pipeline failed'
+            echo 'Pipeline failed.'
         }
     }
 }
