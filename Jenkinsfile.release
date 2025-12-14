@@ -1,8 +1,12 @@
 pipeline {
-  agent any
-  environment {
-    // Récupérer le dernier tag Git automatiquement
-    GIT_TAG = sh(script: "git describe --tags --abbrev=0", returnStdout: true).trim()
+  agent {
+    docker {
+      image 'node:20'
+      args '-u node'
+    }
+  }
+  parameters {
+    string(name: 'GIT_TAG', defaultValue: '', description: 'Tag name (vX.Y.Z)')
   }
   stages {
     stage('Checkout') {
@@ -11,10 +15,8 @@ pipeline {
     stage('Verify Tag') {
       steps {
         script {
-          if (!env.GIT_TAG || env.GIT_TAG.trim() == '') {
-            error('No Git tag found! Make sure you have tags in your repository.')
-          } else {
-            echo "Using Git tag: ${env.GIT_TAG}"
+          if (!params.GIT_TAG?.trim()) {
+            error('GIT_TAG parameter is required')
           }
         }
       }
@@ -28,7 +30,7 @@ pipeline {
     stage('Docker Build & Save') {
       steps {
         script {
-          def imageName = "react-ci:${env.GIT_TAG}"
+          def imageName = "react-ci:${params.GIT_TAG}"
           docker.build(imageName)
           sh "docker save ${imageName} -o ${imageName}.tar || true"
         }
@@ -37,7 +39,7 @@ pipeline {
     stage('Run (Docker)') {
       steps {
         script {
-          def imageName = "react-ci:${env.GIT_TAG}"
+          def imageName = "react-ci:${params.GIT_TAG}"
           docker.withRun(imageName, "-p 8082:80") {
             sh 'sleep 2'
             sh 'bash smoke/smoke_test.sh http://localhost 8082'
@@ -48,8 +50,8 @@ pipeline {
     stage('Archive Artifacts') {
       steps {
         sh 'mkdir -p artifacts'
-        sh "cp react-ci:${env.GIT_TAG}.tar artifacts/ || true"
-        sh 'tar -czf artifacts_release_${env.GIT_TAG}.tar.gz artifacts || true'
+        sh "cp react-ci:${params.GIT_TAG}.tar artifacts/ || true"
+        sh 'tar -czf artifacts_release_${params.GIT_TAG}.tar.gz artifacts'
         archiveArtifacts artifacts: 'artifacts_release_*.tar.gz'
       }
     }
@@ -58,7 +60,7 @@ pipeline {
     }
   }
   post {
-    success { echo "Release pipeline passed for ${env.GIT_TAG}" }
+    success { echo "Release pipeline passed for ${params.GIT_TAG}" }
     failure { echo "Release pipeline failed" }
   }
 }
