@@ -62,7 +62,7 @@ export default function App() {
           }}
         >
           <h1 style={{ marginBottom: 8, fontSize: 24, textAlign: "center" }}>
-            DevOps Login
+            Login
           </h1>
           <p
             style={{
@@ -72,7 +72,7 @@ export default function App() {
               textAlign: "center",
             }}
           >
-            Connectez-vous pour accéder à l&apos;application React CI Project.
+            Connectez-vous pour accéder à l&apos;application Agrovera.
           </p>
 
           <form
